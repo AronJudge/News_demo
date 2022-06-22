@@ -4,21 +4,35 @@ import androidx.annotation.NonNull;
 
 import android.os.Bundle;
 
+import androidx.lifecycle.SavedStateViewModelFactory;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
+import android.os.Debug;
+import android.os.Environment;
+import android.util.Log;
+import android.view.View;
+
+import com.arch.demo.core.customview.BaseCustomViewModel;
+import com.arch.demo.core.fragment.MvvmFragment;
+import com.scwang.smartrefresh.header.WaterDropHeader;
 import com.scwang.smartrefresh.layout.api.RefreshLayout;
+import com.scwang.smartrefresh.layout.constant.SpinnerStyle;
+import com.scwang.smartrefresh.layout.footer.BallPulseFooter;
 import com.scwang.smartrefresh.layout.listener.OnLoadMoreListener;
 import com.scwang.smartrefresh.layout.listener.OnRefreshListener;
-import com.xiangxue.base.mvvm.view.BaseMvvmFragment;
 import com.xiangxue.news.R;
 import com.xiangxue.news.databinding.FragmentNewsBinding;
-import com.xiangxue.base.customview.BaseCustomViewModel;
 
-import java.util.List;
+import java.io.File;
+import java.util.ArrayList;
+
+import dagger.hilt.android.AndroidEntryPoint;
 
  
-public class NewsListFragment extends BaseMvvmFragment<FragmentNewsBinding,NewsListViewModel, BaseCustomViewModel>  {
+@AndroidEntryPoint
+public class NewsListFragment extends MvvmFragment<FragmentNewsBinding, NewsListViewModel, BaseCustomViewModel> {
     private NewsListRecyclerViewAdapter mAdapter;
 
     protected final static String BUNDLE_KEY_PARAM_CHANNEL_ID = "bundle_key_param_channel_id";
@@ -26,16 +40,13 @@ public class NewsListFragment extends BaseMvvmFragment<FragmentNewsBinding,NewsL
 
     public static NewsListFragment newInstance(String channelId, String channelName) {
         NewsListFragment fragment = new NewsListFragment();
+        if (channelName.equalsIgnoreCase("国内焦点"))
+            Log.e("国内焦点:", "newInstance..");
         Bundle bundle = new Bundle();
         bundle.putString(BUNDLE_KEY_PARAM_CHANNEL_ID, channelId);
         bundle.putString(BUNDLE_KEY_PARAM_CHANNEL_NAME, channelName);
         fragment.setArguments(bundle);
         return fragment;
-    }
-
-    @Override
-    protected String getFragmentTag() {
-        return getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_NAME);
     }
 
     @Override
@@ -45,38 +56,64 @@ public class NewsListFragment extends BaseMvvmFragment<FragmentNewsBinding,NewsL
 
     @Override
     public NewsListViewModel getViewModel() {
-        return new ViewModelProvider(getActivity(), new NewsListViewModel.NewsListViewModelFactory(getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_ID),getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_NAME)))
-                .get(getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_ID), NewsListViewModel.class);
-      //  return new NewsListViewModel(getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_ID),getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_NAME));
+        return new ViewModelProvider(getActivity(),
+                new SavedStateViewModelFactory(getActivity().getApplication(),
+                        getActivity(), getArguments()))
+                .get(getFragmentTag(), NewsListViewModel.class);
     }
 
     @Override
-    public void onNetworkResponded(List<BaseCustomViewModel> baseCustomViewModels, boolean isDataUpdated) {
-        viewDataBinding.refreshLayout.finishRefresh();
+    public void onListItemInserted(ArrayList<BaseCustomViewModel> sender) {
+        mAdapter.setData(sender);
         viewDataBinding.refreshLayout.finishLoadMore();
-        if(isDataUpdated) {
-            mAdapter.setData(baseCustomViewModels);
-        }
+        viewDataBinding.refreshLayout.finishRefresh();
+        showSuccess();
     }
 
     @Override
-    protected void onViewCreated() {
-        mAdapter = new NewsListRecyclerViewAdapter();
+    public void onFinishRefresh() {
+        viewDataBinding.refreshLayout.finishLoadMore();
+        viewDataBinding.refreshLayout.finishRefresh();
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        mFragmentTag = "NewsListFragment";
         viewDataBinding.listview.setHasFixedSize(true);
         viewDataBinding.listview.setLayoutManager(new LinearLayoutManager(getContext()));
+        viewDataBinding.listview.addItemDecoration(new RecycleViewDivider(getContext(),
+                LinearLayoutManager.HORIZONTAL));
+        mAdapter = new NewsListRecyclerViewAdapter(getActivity());
         viewDataBinding.listview.setAdapter(mAdapter);
+        viewDataBinding.refreshLayout.setRefreshHeader(new WaterDropHeader(getContext()));
+        viewDataBinding.refreshLayout.setRefreshFooter(new BallPulseFooter(getContext()).setSpinnerStyle(SpinnerStyle.Scale));
+        viewModel.dataList.observe(this, this);
         viewDataBinding.refreshLayout.setOnRefreshListener(new OnRefreshListener() {
             @Override
             public void onRefresh(@NonNull RefreshLayout refreshLayout) {
-                viewModel.refresh();
+                viewModel.tryToRefresh();
             }
         });
         viewDataBinding.refreshLayout.setOnLoadMoreListener(new OnLoadMoreListener() {
             @Override
             public void onLoadMore(@NonNull RefreshLayout refreshLayout) {
-                viewModel.loadNextPage();
+                viewModel.tryToLoadNextPage();
             }
         });
-       // setLoadSir(viewDataBinding.refreshLayout);
+        setLoadSir(viewDataBinding.refreshLayout);
+        showLoading();
+    }
+
+    /***
+     * 重试按钮点击
+     */
+    protected void onRetryBtnClick() {
+        viewModel.tryToRefresh();
+    }
+
+    @Override
+    protected String getFragmentTag() {
+        return getArguments().getString(BUNDLE_KEY_PARAM_CHANNEL_NAME);
     }
 }

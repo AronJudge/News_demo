@@ -1,12 +1,23 @@
 package com.xiangxue.news.homefragment.headlinenews;
 
-import com.xiangxue.base.mvvm.viewmodel.BaseMvvmViewModel;
-import com.xiangxue.news.homefragment.api.NewsChannelsBean;
+import android.os.Looper;
+import android.os.MessageQueue;
 
-public class HeadlineNewsViewModel extends BaseMvvmViewModel<NewsChannelModel, NewsChannelsBean.ChannelList> {
+import com.arch.demo.core.viewmodel.MvvmBaseViewModel;
 
-    @Override
-    public NewsChannelModel createModel() {
-        return new NewsChannelModel();
+ 
+public class HeadlineNewsViewModel extends MvvmBaseViewModel<ChannelsModel, ChannelsModel.Channel> {
+    public HeadlineNewsViewModel() {
+        model = new ChannelsModel();
+        model.register(this);
+
+        Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
+            @Override
+            public boolean queueIdle() {
+                model.getCachedDataAndLoad();
+                return false;
+            }
+        });
     }
+
 }
