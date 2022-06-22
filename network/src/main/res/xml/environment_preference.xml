@@ -3,6 +3,15 @@
 
     <ListPreference
         android:defaultValue="1"
+        android:entries="@array/interfaceArray"
+        android:entryValues="@array/interfaceValues"
+        android:icon="@drawable/ic_controls"
+        android:key="interface_environment_type"
+        android:summary="请您选择您需要使用的接口环境，选择完后会重启APP生效"
+        android:title="设置接口环境" />
+
+    <ListPreference
+        android:defaultValue="0"
         android:entries="@array/environmentArray"
         android:entryValues="@array/environmentValues"
         android:icon="@drawable/ic_controls"

@@ -2,9 +2,12 @@ package com.xiangxue.network.base;
 
 import com.xiangxue.network.commoninterceptor.CommonRequestInterceptor;
 import com.xiangxue.network.commoninterceptor.CommonResponseInterceptor;
+import com.xiangxue.network.dns.AlibabaDns;
 import com.xiangxue.network.environment.EnvironmentActivity;
 import com.xiangxue.network.environment.IEnvironment;
 import com.xiangxue.network.errorhandler.HttpErrorHandler;
+import com.xiangxue.network.wakeNetwork.DoraemonWeakNetworkInterceptor;
+import com.xiangxue.network.wakeNetwork.WeakNetworkManager;
 
 import java.util.HashMap;
 
@@ -22,6 +25,7 @@ import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
+
 public abstract class NetworkApi implements IEnvironment {
     private static INetworkRequiredInfo iNetworkRequiredInfo;
     private static HashMap<String, Retrofit> retrofitHashMap = new HashMap<>();
@@ -39,6 +43,8 @@ public abstract class NetworkApi implements IEnvironment {
     public static void init(INetworkRequiredInfo networkRequiredInfo) {
         iNetworkRequiredInfo = networkRequiredInfo;
         mIsFormal = EnvironmentActivity.isOfficialEnvironment(networkRequiredInfo.getApplicationContext());
+        int networkType = EnvironmentActivity.getNetworkType(networkRequiredInfo.getApplicationContext());
+        WeakNetworkManager.get().setType(networkType);
     }
 
     protected Retrofit getRetrofit(Class service) {
@@ -63,13 +69,15 @@ public abstract class NetworkApi implements IEnvironment {
             }
             int cacheSize = 100 * 1024 * 1024; // 10MB
             okHttpClientBuilder.cache(new Cache(iNetworkRequiredInfo.getApplicationContext().getCacheDir(), cacheSize));
+            okHttpClientBuilder.addInterceptor(new DoraemonWeakNetworkInterceptor());
             okHttpClientBuilder.addInterceptor(new CommonRequestInterceptor(iNetworkRequiredInfo));
             okHttpClientBuilder.addInterceptor(new CommonResponseInterceptor());
-            if (iNetworkRequiredInfo != null &&(iNetworkRequiredInfo.isDebug())) {
+            if (iNetworkRequiredInfo != null && (iNetworkRequiredInfo.isDebug())) {
                 HttpLoggingInterceptor httpLoggingInterceptor = new HttpLoggingInterceptor();
                 httpLoggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
                 okHttpClientBuilder.addInterceptor(httpLoggingInterceptor);
             }
+            okHttpClientBuilder.dns(new AlibabaDns(iNetworkRequiredInfo.getApplicationContext()));
             mOkHttpClient = okHttpClientBuilder.build();
         }
         return mOkHttpClient;
@@ -80,7 +88,7 @@ public abstract class NetworkApi implements IEnvironment {
         return new ObservableTransformer<T, T>() {
             @Override
             public ObservableSource<T> apply(Observable<T> upstream) {
-                Observable<T> observable = (Observable<T>)upstream
+                Observable<T> observable = (Observable<T>) upstream
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
                         .map(getAppErrorHandler())

@@ -12,8 +12,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 public final class TecentUtil {
-    public static final String secretId = "AKIDnjz8xpfrnajD4jttiwh7z4b7bo52D0ok69js";
-    public static final String secretKey = "7ftsdyjglbd4ug2MgauW1Doa1KvrDlwH5s9Tm6u";
+    public static final String secretId = "AKIDfsO3oO9pVf48554tyQj027zw55P56BpdMp0W";
+    public static final String secretKey = "lGeg7pjchn1qzarl3mccjxscwxsq6788xmrirk3i";
     private static final String CONTENT_CHARSET = "UTF-8";
     private static final String HMAC_ALGORITHM = "HmacSHA1";
     private TecentUtil(){
