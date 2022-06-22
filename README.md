@@ -730,3 +730,116 @@ Android 将按如下方式为界面元素着色，以确定过度绘制的次数
 
 - 移除布局中不需要的背景。 默认情况下，布局没有背景，这表示布局本身不会直接渲染任何内容。但是，当布局具有背景时，其有 可能会导致过度绘制。 移除不必要的背景可以快速提高渲染性能。不必要的背景可能永远不可见，因为它会被应用在该视图上 绘制的任何其他内容完全覆盖。例如，当系统在父视图上绘制子视图时，可能会完全覆盖父视图的背 景。 
 - 使视图层次结构扁平化。 可以通过优化视图层次结构来减少重叠界面对象的数量，从而提高性能。 降低透明度。 对于不透明的 view ，只需要渲染一次即可把它显示出来。但是如果这个 view 设置了 alpha 值，则至 少需要渲染两次。这是因为使用了 alpha 的 view 需要先知道混合 view 的下一层元素是什么，然后再 结合上层的 view 进行Blend混色处理。透明动画、淡入淡出和阴影等效果都涉及到某种透明度，这就会 造成了过度绘制。可以通过减少要渲染的透明对象的数量，来改善这些情况下的过度绘制。例如，如需 获得灰色文本，可以在 TextView 中绘制黑色文本，再为其设置半透明的透明度值。但是，简单地通过 用灰色绘制文本也能获得同样的效果，而且能够大幅提升性能
+
+
+## 5. 网络优化
+
+正常一条网络请求需要经过的流程是这样：
+
+- DNS 解析，请求DNS服务器，获取域名对应的 IP 地址； 
+- 与服务端建立连接，包括 tcp 三次握手，安全协议同步流程； 
+- 连接建立完成，发送和接收数据，解码数据。
+
+ 这里有明显的三个优化点： 
+
+- 直接使用 IP 地址，去除 DNS 解析步骤； 
+- 不要每次请求都重新建立连接，复用连接或一直使用同一条连接(长连接)； 
+- 压缩数据，减小传输的数据大小。
+
+### 5.1 DNS优化
+
+DNS（Domain Name System），它的作用是根据域名查出IP地址，它是HTTP协议的前提，只有将域名正确的解 析成IP地址后，后面的HTTP流程才能进行。
+
+
+
+DNS 完整的解析流程很长，会先从本地系统缓存取，若没有就到最近的 DNS 服务器取，若没有再到主域名服务器 取，每一层都有缓存，但为了域名解析的实时性，每一层缓存都有过期时间。
+
+传统的DNS解析机制有几个缺点： 
+
+- 缓存时间设置得长，域名更新不及时，设置得短，大量 DNS 解析请求影响请求速度；
+- 域名劫持，容易被中间人攻击，或被运营商劫持，把域名解析到第三方 IP 地址，据统计劫持率会达到7%； 
+- DNS 解析过程不受控制，无法保证解析到最快的IP；
+- 一次请求只能解析一个域名。
+
+为了解决这些问题，就有了 HTTPDNS，原理很简单，就是自己做域名解析的工作，通过 HTTP 请求后台去拿到域 名对应的 IP 地址，直接解决上述所有问题。
+
+HTTPDNS的好处总结就是： 
+
+- Local DNS 劫持：由于 HttpDns 是通过 IP 直接请求 HTTP 获取服务器 A 记录地址，不存在向本地运营商询问 domain 解析过程，所以从根本避免了劫持问题。 
+- DNS 解析由自己控制，可以确保根据用户所在地返回就近的 IP 地址，或根据客户端测速结果使用速度最快的 IP； 一次请求可以解析多个域名。 
+- ......
+
+接入文档 ：
+
+[产品优势 - HTTPDNS - 阿里云 (aliyun.com)](https://help.aliyun.com/document_detail/30103.html?spm=a2c4g.11186623.6.543.7eee78bc3kDYhO)
+
+1. 配置仓库
+
+```groovy
+maven {	url 'http://maven.aliyun.com/nexus/content/repositries/release/'}
+```
+
+2. 加入依赖
+
+   ```groovy
+   implemntation ('com.aliyun.ams:alicloud-android-httpdns:1.3.3@aar') {	transitive true	exlude group: 'com.aliyun.ams', moudle: 'alicloud-android-utdid'}implementation 'com.aliyun.ams:aliclound-android-utdid:1.1.5.3', 
+   ```
+
+3. 在network 模块 下 对Retrofit 进行配
+
+   1. ```java
+      protected Retrofit getRetrofit(class service) {	...................    retrofitBuilder.Client(getOkhttpClient());}getOkhttpClient() {    .............        // 把自定义得DNS注册进去        okhttpClientBuilder.dns(new AlibabaDns(iNetworkRequiredInfo).getApplicationContext());}public class AlibabaDns implements Dns {        private HttpDnsService httpdns;        public AlibabaDns(Context context) {        httpdns = HttpDns = httpDns.getService(context, '169929');    }        public List<InetAddress> lookup(String hostname) throws unknowHostException {        // 通过异步解析接口获取IP        String ip = httpdns.getIpByHostAsync(hostName);        if(iP != null) {            List<InetAddress> inetAddress = Arrays.asList(InetAddress.getAllByName(ip));            return inetAddresses;        }        return Dns.SYSTEM.lookUp(hostname);    }}================= 原理 首先使用固定IP 进行Http 请求 private static final String[] b = new String[] {"203.107.1.97", "203.107.1.100", "httpdns-sc.aliyundns.com"};    
+      ```
+
+      把要解析的域名 传给服务器。
+
+### 5.2 优化连接
+
+连接建立耗时的问题，这里主要的优化思路是复用连接，不用每次请求都重新建立连接，如何更有效 率地复用连接，可以说是网络请求速度优化里最主要的点了。
+
+【keep-alive】： HTTP 协议里有个 keep-alive，HTTP1.1默认开启，一定程度上缓解了每次请求都要进行TCP三 次握手建立连接的耗时。原理是请求完成后不立即释放连接，而是放入连接池中，若这时有另一个请求要发出，请 求的域名和端口是一样的，就直接拿出连接池中的连接进行发送和接收数据，少了建立连接的耗时。 实际上现在无 论是客户端还是浏览器都默认开启了keep-alive，对同个域名不会再有每发一个请求就进行一次建连的情况，纯短 连接已经不存在了。
+
+但有 keep-alive 的连接一次只能发送接收一个请求，在上一个请求处理完成之前，无法接受新的请求。若同时发 起多个请求，就有两种情况： 
+
+- 若串行发送请求，可以一直复用一个连接，但速度很慢，每个请求都要等待上个请求完成再进行发送。 
+- 若并行发送请求，那么只能每个请求都要进行tcp三次握手建立新的连接。
+
+​	对并行请求的问题，新一代协议 HTTP2 提出了多路复用去解决。 HTTP2 的多路复用机制一样是复用连接，但它复 用的这条连接支持同时处理多条请求，所有请求都可以并发在这条连接上进行，也就解决了上面说的并发请求需要 建立多条连接带来的问题。
+
+​	多路复用把在连接里传输的数据都封装成一个个stream，每个stream都有标识，stream的发送和接收可以是乱序 的，不依赖顺序，也就不会有阻塞的问题，接收端可以根据stream的标识去区分属于哪个请求，再进行数据拼接， 得到最终数据。 Android 的开源网络库OKhttp默认就会开启 keep-alive ，并且在Okhttp3以上版本也支持了 HTTP2。
+
+### 5.3 数据压缩
+
+传输数据大小的问题。数据对请求速度的影响分两方面，一是压缩率，二是解压序列化反序列化的速 度。目前最流行的两种数据格式是 json 和 protobuf，json 是字符串，protobuf 是二进制，即使用各种压缩算法 压缩后，protobuf 仍会比 json 小，数据量上 protobuf 有优势，序列化速度 protobuf 也有一些优势 。
+
+除了选择不同的序列化方式（数据格式）之外，Http可以对内容（也就是body部分）进行编码，可以采用gzip这 样的编码，从而达到压缩的目的。
+
+在OKhttp的 BridgeInterceptor 中会自动为我们开启gzip解压的支持。
+
+```java
+boolean transparentGzip = false;if (userRequest.header("Accept-Encoding") == null && userRequest.header("Range") == null) {	transparentGzip = true;	requestBuilder.header("Accept-Encoding", "gzip");}
+```
+
+如果服务器响应头存在： Content-Encodin:gzip
+
+```java
+/服务器响应 Content-Encodin:gzip 并且有响应body数据if (transparentGzip	&& "gzip".equalsIgnoreCase(networkResponse.header("Content-Encoding"))	&& HttpHeaders.hasBody(networkResponse)) {	GzipSource responseBody = new GzipSource(networkResponse.body().source());	Headers strippedHeaders = networkResponse.headers().newBuilder()		.removeAll("Content-Encoding")		.removeAll("Content-Length")		.build();	responseBuilder.headers(strippedHeaders);	String contentType = networkResponse.header("Content-Type");	responseBuilder.body(new RealResponseBody(contentType, -1L, Okio.buffer(responseBody)));}
+```
+
+客户端也可以发送压缩数据给服务端，通过代码将请求数据压缩，并在请求中加入 Content-Encodin:gzip 即可
+
+```java
+private RequestBody gzip(final RequestBody body) {	return new RequestBody() {		@Override		public MediaType contentType() {			return body.contentType();		}		@Override		public long contentLength() {			return -1; // We don't know the compressed length in advance!		}		@Override		public void writeTo(BufferedSink sink) throws IOException {			BufferedSink gzipSink = Okio.buffer(new GzipSink(sink));			body.writeTo(gzipSink);			gzipSink.close();		}	};    public RequestBody getGzipRequest(String body) {	RequestBody request = null;	try {		request = RequestBody.create(		MediaType.parse("application/octet-stream"),compress(body)		);		} catch (IOException e) {			e.printStackTrace();	}	return request;}
+```
+
+1、使用webp代替png/jpg 
+
+2、不同网络的不同图片下发，如（对于原图是300x300的图片）： 
+
+2/3G使用低清晰度图片：使用100X100的图片;
+
+- 4G再判断信号强度为强则使用使用300X300的图片，
+- 为中等则使用200x200，信号弱则使用100x100图片; 
+- WiFi网络：直接下发300X300的图片 
+
+3、http开启缓存 / 首页数据加入缓存
